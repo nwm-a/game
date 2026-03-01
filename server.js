@@ -174,20 +174,34 @@ app.post('/explore', async (req, res) => {
 
     bLogs.push(`<b style="color:orange; font-size:1.1em;">⚔️ ${enemy.username}が現れた！</b><hr style="border:0;border-top:1px solid #333">`);
 
+// --- /explore エンドポイント内のバトルループ部分 ---
+
     let turn = 1; let win = false;
     while (turn <= 15) {
+        // ターン数の表示を追加
+        bLogs.push(`<small style="color:#888;">● ${turn}ターン目</small>`);
+
         const pFirst = player.agi >= enemy.agi;
+        
+        // 1回目の攻撃
         const res1 = calculateAttack(pFirst ? player : enemy, pFirst ? enemy : player, pFirst);
-        bLogs.push(res1.logs[0]);
+        bLogs.push(...res1.logs); // ...を使って全てのログ（回避・クリティカル含む）を入れる
         if (pFirst) enemy.hp -= res1.damage; else player.hp -= res1.damage;
-        if (enemy.hp <= 0) { win = true; break; } if (player.hp <= 0) break;
+        
+        if (enemy.hp <= 0) { win = true; break; } 
+        if (player.hp <= 0) break;
+        
+        // 2回目の攻撃
         const res2 = calculateAttack(!pFirst ? player : enemy, !pFirst ? enemy : player, !pFirst);
-        bLogs.push(res2.logs[0]);
+        bLogs.push(...res2.logs); // ...を使って全てのログを入れる
         if (!pFirst) enemy.hp -= res2.damage; else player.hp -= res2.damage;
-        if (enemy.hp <= 0) { win = true; break; } if (player.hp <= 0) break;
+        
+        if (enemy.hp <= 0) { win = true; break; } 
+        if (player.hp <= 0) break;
+        
         turn++;
     }
-
+    
     if (win) {
         const bonus = user.boostUntil > now ? 1.5 : 1.0;
         const g = Math.floor(Math.random() * 20 + 10) * m;
