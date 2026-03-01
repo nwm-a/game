@@ -212,37 +212,69 @@ app.post('/arena/challenge', async (req, res) => {
     const targetFloor = arena[floorId];
     const now = Date.now();
 
-    // 1. クールタイムチェック
+    // 1. クールタイム
     if (now - (user.lastArenaAction || 0) < 60000) return res.status(400).json({ message: "クールタイム1分" });
 
-    // 2. 【追加】現在どこかの階の王者かどうかチェック
+    // 2. 現在どこかの階の王者なら移動不可
     for (let fId in arena) {
         if (arena[fId].owner.username === username) {
-            // もし自分が今「挑戦しようとしている階」の王者なら、当然戦えない
-            if (fId === floorId) return res.status(400).json({ message: "あなたは既にこの階の王者です！" });
-            
-            // もし「下の階」の王者なら、上の階へ行く前に王座を譲る（または負ける）必要があるというルールにする場合
-            return res.status(400).json({ message: "王者の座を捨てて上に行くことは許されない！(防衛を続けてください)" });
+            if (fId === floorId) return res.status(400).json({ message: "既にこの階の王者です！" });
+            return res.status(400).json({ message: "王座を捨てて上には行けない！(防衛してください)" });
         }
     }
 
-    // 3. 上の階への挑戦資格チェック（既存の履歴チェック）
+    // 3. 挑戦資格
     if (targetFloor.required && (!user.arenaHistory || !user.arenaHistory[targetFloor.required])) {
         return res.status(400).json({ message: "下の階の王者経験が必要です！" });
     }
 
     user.lastArenaAction = now;
-    let p1 = { ...user, hp: user.hp + user.equipment.accessory.hp_bonus, str: user.str + user.equipment.weapon.str_bonus + (user.equipment.weapon.plus * 3), vit: user.vit + user.equipment.armor.vit_bonus + (user.equipment.armor.plus * 2), agi: user.agi + user.equipment.armor.agi_bonus + (user.equipment.armor.plus * 1), dex: user.dex + user.equipment.weapon.dex_bonus + (user.equipment.weapon.plus * 1), luk: user.luk + user.equipment.accessory.luk_bonus + (user.equipment.accessory.plus * 1) };
+    
+    // 挑戦者のステータス（補正込）
+    const eq = user.equipment;
+    let p1 = { ...user, hp: user.hp + eq.accessory.hp_bonus, str: user.str + eq.weapon.str_bonus + (eq.weapon.plus * 3), vit: user.vit + eq.armor.vit_bonus + (eq.armor.plus * 2), agi: user.agi + eq.armor.agi_bonus + (eq.armor.plus * 1), dex: user.dex + eq.weapon.dex_bonus + (eq.weapon.plus * 1), luk: user.luk + eq.accessory.luk_bonus + (eq.accessory.plus * 1) };
+    if (user.style === "offense") { p1.str *= 1.3; p1.vit *= 0.7; }
+    if (user.style === "defense") { p1.str *= 0.7; p1.vit *= 1.3; }
+
+    // 王者のステータス（NPCかプレイヤーか判定）
     let p2 = JSON.parse(JSON.stringify(targetFloor.owner));
-    // 王者のステータスはそのまま（補正込で保存されているはず）
+    // NPCの場合は装備がないのでそのまま、プレイヤー王者の場合は補正をかける
+    if (p2.equipment) {
+        const e2 = p2.equipment;
+        p2.hp += e2.accessory.hp_bonus;
+        p2.str += e2.weapon.str_bonus + (e2.weapon.plus * 3);
+        p2.vit += e2.armor.vit_bonus + (e2.armor.plus * 2);
+        p2.agi += e2.armor.agi_bonus + (e2.armor.plus * 1);
+        p2.dex += e2.weapon.dex_bonus + (e2.weapon.plus * 1);
+        p2.luk += e2.accessory.luk_bonus + (e2.accessory.plus * 1);
+        if (p2.style === "offense") { p2.str *= 1.3; p2.vit *= 0.7; }
+        if (p2.style === "defense") { p2.str *= 0.7; p2.vit *= 1.3; }
+    }
+
+    // 【重要】弱体化（デバフ）ではなく、王者の「疲労」を表現するならココ。
+    // もし弱体化をなくしたいなら、以下の penalty 行を消してください。
+    // 今は「連勝するほど少しずつ不利になる（10連勝でステータス50%減）」という計算になっています。
+    // const penalty = Math.max(0.5, 1.0 - (targetFloor.winStreak * 0.05));
+    // p2.str *= penalty; p2.vit *= penalty;
 
     let bLogs = [`<b style="color:#fc0; font-size:1.1em;">🏟️ ${p2.username} 王への挑戦！</b>`];
     let turn = 1; let win = false;
+    
     while (turn <= 20) {
-        const res1 = calculateAttack(p1, p2, true); bLogs.push(res1.logs[0]); p2.hp -= res1.damage;
+        bLogs.push(`<small style="color:#888;">● ${turn}ターン目</small>`);
+        
+        // 挑戦者の攻撃
+        const res1 = calculateAttack(p1, p2, true);
+        bLogs.push(...res1.logs); // [0]を消して全てのログを追加
+        p2.hp -= res1.damage;
         if (p2.hp <= 0) { win = true; break; }
-        const res2 = calculateAttack(p2, p1, false); bLogs.push(res2.logs[0]); p1.hp -= res2.damage;
+        
+        // 王者の攻撃
+        const res2 = calculateAttack(p2, p1, false);
+        bLogs.push(...res2.logs); // 全てのログを追加
+        p1.hp -= res2.damage;
         if (p1.hp <= 0) break;
+        
         turn++;
     }
 
@@ -251,11 +283,12 @@ app.post('/arena/challenge', async (req, res) => {
         targetFloor.winStreak = 1;
         if(!user.arenaHistory) user.arenaHistory = {};
         user.arenaHistory[floorId] = true;
-        bLogs.push(`<b style="color:yellow">🎊 あなたが新王者です！</b>`);
+        bLogs.push(`<hr><b style="color:yellow">🎊 あなたが新王者です！</b>`);
     } else {
         targetFloor.winStreak++;
-        bLogs.push(`<b style="color:red">💀 敗北...</b>`);
+        bLogs.push(`<hr><b style="color:red">💀 敗北... 王者は強かった。</b>`);
     }
+    
     await saveData();
     res.json({ battleLogs: bLogs, user, win });
 });
