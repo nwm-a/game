@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pochi The STR</title>
+    <style>
+        body { background: #0a0a0a; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; margin: 0; display: flex; flex-direction: column; align-items: center; }
+        .container { width: 95%; max-width: 1100px; margin-top: 20px; }
+        @media (min-width: 850px) { .game-grid { display: grid; grid-template-columns: 1.2fr 1fr; gap: 20px; } }
+        .card { border: 1px solid #333; padding: 20px; background: #111; border-radius: 8px; margin-bottom: 15px; position: relative; }
+        .stat-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; background: #000; padding: 12px; border-radius: 5px; font-size: 0.95em; }
+        .val { color: #4f4; font-weight: bold; float: right; font-family: monospace; }
+        #log-window { height: 400px; background: #000; overflow-y: auto; padding: 15px; font-size: 0.9em; border: 1px solid #222; line-height: 1.6; }
+        #chat-window { height: 200px; background: #050505; overflow-y: auto; padding: 10px; font-size: 0.85em; margin-bottom: 10px; }
+        .tab-nav { display: flex; gap: 2px; margin-bottom: 10px; background: #222; padding: 5px; border-radius: 5px; }
+        .tab-btn { background: transparent; color: #888; border: none; padding: 10px; cursor: pointer; flex: 1; font-weight: bold; transition: 0.2s; }
+        .tab-active { background: #900; color: #fff; border-radius: 4px; }
+        .arena-floor { border-left: 5px solid #f00; padding: 15px; background: #1a1a1a; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border-radius: 0 4px 4px 0; }
+        input, select, button { background: #222; color: #fff; border: 1px solid #444; padding: 12px; border-radius: 4px; width: 100%; box-sizing: border-box; }
+        .btn-red { background: #900; border: none; font-weight: bold; cursor: pointer; }
+        .btn-red:disabled { background: #444; color: #888; opacity: 0.5; cursor: not-allowed; }
+        .exp-bar { background: #222; height: 8px; border-radius: 4px; margin: 8px 0; overflow: hidden; }
+        #exp-fill { background: #08f; height: 100%; width: 0%; transition: 0.5s; }
+        .hidden { display: none !important; }
+        small { color: #888; }
+        /* タップ可能な名前 */
+        .clickable-name { color: #fc0; cursor: pointer; text-decoration: underline; }
+        /* モーダル */
+        #modal-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); display:flex; justify-content:center; align-items:center; z-index:100; }
+        .modal-content { background:#111; padding:20px; border:2px solid #900; border-radius:10px; width:300px; position:relative; }
+    </style>
+</head>
+<body>
+
+    <h1 style="color: #f00; letter-spacing: 5px; margin: 20px 0; text-shadow: 0 0 10px #f005;">Pochi The STR</h1>
+
+<div id="auth-area" class="card" style="width: 400px; text-align: center;">
+        <div style="margin-bottom: 20px; text-align: left; border-bottom: 1px solid #444; padding-bottom: 15px;">
+            <h2 style="color: #f00; font-size: 1.2em; margin-top: 0;">💪 筋肉がすべてを決める世界へ</h2>
+            <p style="font-size: 0.85em; color: #ccc; line-height: 1.6;">
+                ここは、魔法も奇跡も存在しない肉体美の聖域。<br>
+                君の武器は、鍛え上げたその<b>拳（STR）</b>のみだ。
+            </p>
+            <ul style="font-size: 0.8em; color: #aaa; padding-left: 20px; text-align: left;">
+                <li><b>ポチポチ探索:</b> 魔物を倒し、GOLDと石を奪え。</li>
+                <li><b>装備強化:</b> 拾った石で装備を叩き直せ。</li>
+                <li><b>頂点への登頂:</b> 闘技場の王をボコして座を奪え。</li>
+            </ul>
+            <p style="font-size: 0.75em; color: #888;">※新規登録で「3日間の肉体加速（ブースト）」付与！</p>
+        </div>
+
+        <input type="text" id="u-in" placeholder="プレイヤー名" style="margin-bottom:10px;">
+        <input type="password" id="p-in" placeholder="パスワード" style="margin-bottom:10px;">
+        <button class="btn-red" onclick="handleAuth('register')" style="margin-bottom:5px;">新規登録</button>
+        <button onclick="handleAuth('login')" style="background: #333;">ログイン</button>
+    </div>
+
+    <div id="main-ui" class="container hidden">
+        <div id="boost-banner" style="background:linear-gradient(90deg, #640, #b80); color:white; padding:10px; text-align:center; font-size:0.85em; margin-bottom:15px; border-radius:5px; font-weight:bold; display:none;"></div>
+
+        <div class="game-grid">
+            <div class="left-col">
+                <div class="card">
+                    <div style="display:flex; justify-content: space-between; align-items: baseline; margin-bottom: 5px;">
+                        <h2 style="margin:0;"><span id="my-icon"></span> <span id="display-name"></span></h2>
+                        <span style="font-size:1.2em;">Lv.<b id="lv" style="color: #f00;"></b></span>
+                    </div>
+                    <div class="exp-bar"><div id="exp-fill"></div></div>
+                    <div class="stat-grid" id="stat-list"></div>
+                    
+                    <div class="tab-nav">
+                        <button class="tab-btn tab-active" id="btn-home" onclick="switchTab('home')">探索</button>
+                        <button class="tab-btn" id="btn-arena" onclick="switchTab('arena')">闘技場</button>
+                    </div>
+
+                    <div id="home-area">
+                        <select id="area-select" style="margin-bottom:10px;"></select>
+                        <button id="explore-btn" class="btn-red" onclick="explore()">探索開始</button>
+                        <div id="timer-bar" style="height:4px; background:#f00; width:0%; margin-top:5px;"></div>
+                    </div>
+
+                    <div id="arena-area" class="hidden">
+                        <div id="arena-list"></div>
+                        <div id="arena-timer" style="font-size:0.8em; color:orange; text-align:center; margin-top:10px;"></div>
+                    </div>
+                </div>
+                <div class="card"><div id="log-window"></div></div>
+            </div>
+
+            <div class="right-col">
+                <div class="tab-nav">
+                    <button class="tab-btn tab-active" id="btn-forge" onclick="switchRightTab('forge')">鍛冶</button>
+                    <button class="tab-btn" id="btn-shop" onclick="switchRightTab('shop')">道具/売却</button>
+                    <button class="tab-btn" id="btn-room" onclick="switchRightTab('room')">設定</button>
+                </div>
+
+                <div id="forge-area" class="card">
+                    <div style="display:flex; justify-content: space-between; align-items: center; margin-bottom:10px;">
+                        <h3 style="margin:0;">⚒️ 装備強化</h3>
+                        <span style="color:cyan; font-weight:bold;">石: <b id="stone-count"></b></span>
+                    </div>
+                    <div id="forge-list"></div>
+                </div>
+
+                <div id="shop-area" class="card hidden">
+                    <h3>🛒 ショップ</h3>
+                    <p>所持金: <b id="gold-count" style="color:#fc0; font-size:1.2em;"></b> G</p>
+                    <button onclick="buy('protein')" style="margin-bottom:10px; height: 50px;">プロテイン(1000G)<br><small>7日間ブースト付与</small></button>
+                    <button onclick="buy('stone')" style="margin-bottom:20px; height: 50px;">強化石(300G)<br><small>装備強化に使用</small></button>
+                    
+                    <h3>💰 アイテム売却</h3>
+                    <button onclick="sell('stone')" style="height: 50px; background:#442222; border-color:#844;">強化石を売る(150G)<br><small>1つずつ売却します</small></button>
+               </div>
+                <div id="room-area" class="card hidden">
+    <h3>🏠 プロフィール設定</h3>
+    <label style="font-size:0.8em; color:#888;">名前変更</label>
+    <input type="text" id="new-name-in">
+
+    <label style="font-size:0.8em; color:#888;">アイコン</label>
+    <select id="icon-sel">
+        <option value="✊">✊ 拳</option>
+        <option value="💪">💪 腕</option>
+        <option value="🔥">🔥 炎</option>
+        <option value="👑">👑 王</option>
+        <option value="⚡">⚡ 雷</option>
+        <option value="⚔️">⚔️ 剣</option>
+        <option value="🛡️">🛡️ 盾</option>
+    </select>
+
+    <label style="font-size:0.8em; color:#888;">戦術スタイル</label>
+    <select id="style-sel">
+        <option value="normal">バランス（標準）</option>
+        <option value="offense">攻撃重視（STR 1.3倍 / VIT 0.7倍）</option>
+        <option value="defense">防御重視（STR 0.7倍 / VIT 1.3倍）</option>
+    </select>
+
+    <button class="btn-red" onclick="updateProfile()" style="margin-top:10px;">✅ 設定を保存する</button>
+    <button onclick="logout()" style="margin-top:10px; background:#333; opacity:0.6;">ログアウト</button>
+</div>
+
+                <div class="card">
+                    <h3>💬 ワールドチャット</h3>
+                    <div id="chat-window"></div>
+                    <div style="display:flex; gap:5px;"><input type="text" id="chat-in" placeholder="メッセージを入力..." onkeypress="if(event.key==='Enter')sendChat()"><button onclick="sendChat()" style="width:60px; background:#444;">送信</button></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="modal-overlay" class="hidden" onclick="closeModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <h3 id="modal-name" style="margin-top:0;"></h3>
+            <div id="modal-stats" class="stat-grid"></div>
+            <button onclick="closeModal()" style="margin-top:15px;">閉じる</button>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = JSON.parse(localStorage.getItem('physical_user'));
+        let tInterval, cInterval, boostInterval, arenaInterval;
+        let exploreEndTimestamp = 0;
+
+        if (currentUser) loginSuccess();
+
+        async function handleAuth(type) {
+            const username = document.getElementById('u-in').value;
+            const password = document.getElementById('p-in').value;
+            const res = await fetch(`/${type}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ username, password }) });
+            const data = await res.json();
+            if (res.ok) { currentUser = data.user; save(); loginSuccess(); } else alert(data.message);
+        }
+        function save() { localStorage.setItem('physical_user', JSON.stringify(currentUser)); }
+        function logout() { localStorage.removeItem('physical_user'); location.reload(); }
+
+        function loginSuccess() {
+            document.getElementById('auth-area').classList.add('hidden');
+            document.getElementById('main-ui').classList.remove('hidden');
+            document.getElementById('new-name-in').value = currentUser.username;
+            updateUI();
+            cInterval = setInterval(getChat, 4000);
+            boostInterval = setInterval(updateBoostUI, 1000);
+            arenaInterval = setInterval(updateArenaTimer, 1000);
+            getChat();
+        }
+
+        function switchTab(tab) {
+            ['home', 'arena'].forEach(t => { document.getElementById(t+'-area').classList.add('hidden'); document.getElementById('btn-'+t).classList.remove('tab-active'); });
+            document.getElementById(tab+'-area').classList.remove('hidden');
+            document.getElementById('btn-'+tab).classList.add('tab-active');
+            if(tab === 'arena') updateArena();
+        }
+
+        function switchRightTab(tab) {
+            ['forge', 'shop', 'room'].forEach(t => { document.getElementById(t+'-area').classList.add('hidden'); document.getElementById('btn-'+t).classList.remove('tab-active'); });
+            document.getElementById(tab+'-area').classList.remove('hidden');
+            document.getElementById('btn-'+tab).classList.add('tab-active');
+        }
+
+        function updateUI() {
+            const u = currentUser; const eq = u.equipment;
+            document.getElementById('lv').innerText = u.lv;
+            document.getElementById('display-name').innerText = u.username;
+            document.getElementById('stone-count').innerText = u.stone;
+            document.getElementById('gold-count').innerText = u.gold;
+            const next = (u.lv >= 100) ? 100 + (Math.floor((u.lv - 100) / 25) + 1) * 10 : 100;
+            document.getElementById('exp-fill').style.width = (u.exp / next * 100) + "%";
+            
+            const stats = [{n:'HP', v:u.hp+eq.accessory.hp_bonus}, {n:'STR', v:u.str+eq.weapon.str_bonus+(eq.weapon.plus*3)}, {n:'VIT', v:u.vit+eq.armor.vit_bonus+(eq.armor.plus*2)}, {n:'AGI', v:u.agi+eq.armor.agi_bonus+(eq.armor.plus*1)}, {n:'DEX', v:u.dex+eq.weapon.dex_bonus+(eq.weapon.plus*1)}, {n:'LUK', v:u.luk+eq.accessory.luk_bonus+(eq.accessory.plus*1)}];
+            document.getElementById('stat-list').innerHTML = stats.map(s => `<div>${s.n}<span class="val">${s.v}</span></div>`).join('');
+            
+            const areas = { area1: "🌳 はじまりの森", area2: "🏜️ 荒野の廃墟", area3: "🐉 竜の巣" };
+            document.getElementById('area-select').innerHTML = u.unlockedAreas.map(a => `<option value="${a}">${areas[a]}</option>`).join('');
+            
+            document.getElementById('forge-list').innerHTML = Object.keys(eq).map(p => {
+                const item = eq[p];
+                const cost = Math.floor(item.plus / 3) + 1;
+                return `<div style="padding:12px; border-bottom:1px solid #333; display:flex; justify-content:space-between; align-items:center;"><div><span>${item.name} <b style="color:#08f;">+${item.plus}</b></span><br><small style="color:cyan;">💎必要: ${cost}個</small></div><button style="width:80px; padding:6px; font-size:0.8em; background:#0056b3; border:none;" onclick="enhance('${p}')">強化</button></div>`;
+            }).join('');
+
+            if (Date.now() < exploreEndTimestamp) {
+                document.getElementById('explore-btn').disabled = true;
+            } else {
+                document.getElementById('explore-btn').disabled = false;
+                document.getElementById('explore-btn').innerText = "探索開始";
+            }
+            updateArena();
+        }
+
+        async function updateArena() {
+            const res = await fetch('/arena'); const arenaData = await res.json();
+            const arenaArea = document.getElementById('arena-list');
+            const diff = Date.now() - (currentUser.lastArenaAction || 0);
+            const isCoolingDown = diff < 60000;
+
+            arenaArea.innerHTML = ["floor3", "floor2", "floor1"].map(f => `
+                <div class="arena-floor">
+                    <div><b>${arenaData[f].title}</b><br><span class="clickable-name" onclick="viewUser('${arenaData[f].owner.username}')">${arenaData[f].owner.icon} ${arenaData[f].owner.username}</span> <small>(連勝:${arenaData[f].winStreak})</small></div>
+                    <button class="btn-red arena-btn" style="width:80px; padding:8px;" ${isCoolingDown ? 'disabled' : ''} onclick="challengeArena('${f}')">挑戦</button>
+                </div>`).join('');
+        }
+
+        async function viewUser(name) {
+            const res = await fetch(`/user/${name}`);
+            const u = await res.json();
+            if(!res.ok) return;
+            const eq = u.equipment;
+            document.getElementById('modal-name').innerText = `${u.icon} ${u.username} (Lv.${u.lv})`;
+            const stats = [{n:'HP', v:u.hp+eq.accessory.hp_bonus}, {n:'STR', v:u.str+eq.weapon.str_bonus+(eq.weapon.plus*3)}, {n:'VIT', v:u.vit+eq.armor.vit_bonus+(eq.armor.plus*2)}, {n:'AGI', v:u.agi+eq.armor.agi_bonus+(eq.armor.plus*1)}, {n:'DEX', v:u.dex+eq.weapon.dex_bonus+(eq.weapon.plus*1)}, {n:'LUK', v:u.luk+eq.accessory.luk_bonus+(eq.accessory.plus*1)}];
+            document.getElementById('modal-stats').innerHTML = stats.map(s => `<div>${s.n}<span class="val">${s.v}</span></div>`).join('');
+            document.getElementById('modal-overlay').classList.remove('hidden');
+        }
+        function closeModal() { document.getElementById('modal-overlay').classList.add('hidden'); }
+
+        async function challengeArena(floorId) {
+            const res = await fetch('/arena/challenge', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ username: currentUser.username, floorId }) });
+            const data = await res.json();
+            if (res.ok) {
+                if(data.user) { currentUser = data.user; save(); updateUI(); }
+                document.getElementById('log-window').innerHTML = data.battleLogs.join('<br>');
+            } else alert(data.message);
+        }
+
+        function updateArenaTimer() {
+            if(!currentUser || !currentUser.lastArenaAction) return;
+            const rem = Math.max(0, 60000 - (Date.now() - currentUser.lastArenaAction));
+            const el = document.getElementById('arena-timer');
+            if (rem > 0) {
+                el.innerText = `闘技場 次回挑戦可能まで: ${Math.ceil(rem/1000)}秒`;
+                document.querySelectorAll('.arena-btn').forEach(b => b.disabled = true);
+            } else {
+                el.innerText = "闘技場 挑戦可能！";
+                document.querySelectorAll('.arena-btn').forEach(b => b.disabled = false);
+            }
+        }
+
+        async function buy(itemId) {
+            const msg = itemId === 'protein' ? "プロテイン(1000G)を購入してブーストを開始しますか？" : "強化石(300G)を購入しますか？";
+            if(!confirm(msg)) return;
+            const res = await fetch('/shop', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ username: currentUser.username, itemId }) });
+            const data = await res.json(); if (res.ok) { currentUser = data.user; save(); updateUI(); } else alert(data.message);
+        }
+
+        async function sell(itemId) {
+            if(!confirm("強化石を1つ売却して150Gを受け取りますか？")) return;
+            const res = await fetch('/sell', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ username: currentUser.username, itemId }) });
+            const data = await res.json(); if (res.ok) { currentUser = data.user; save(); updateUI(); } else alert(data.message);
+        }
+
+        async function explore() {
+            const res = await fetch('/explore', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ username: currentUser.username, areaId: document.getElementById('area-select').value }) });
+            const data = await res.json();
+            if (res.ok) { currentUser = data.user; save(); updateUI(); document.getElementById('log-window').innerHTML = data.battleLogs.join('<br>'); startTimer(data.nextActionIn); } else alert(data.message);
+        }
+
+        async function enhance(part) {
+            const res = await fetch('/enhance', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ username: currentUser.username, part }) });
+            const data = await res.json(); if (res.ok) { currentUser = data.user; save(); updateUI(); } else alert(data.message);
+        }
+
+        async function sendChat() {
+            const input = document.getElementById('chat-in'); if(!input.value) return;
+            await fetch('/chat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ username: currentUser.username, message: input.value, icon: currentUser.icon }) });
+            input.value = ""; getChat();
+        }
+        async function getChat() { const res = await fetch('/chat'); const logs = await res.json(); renderChat(logs); }
+        function renderChat(logs) {
+            const win = document.getElementById('chat-window'); 
+            win.innerHTML = logs.map(l => `<div><small>[${l.time}]</small> ${l.icon}<b class="clickable-name" onclick="viewUser('${l.username}')">${l.username}</b>: ${l.message}</div>`).join(''); win.scrollTop = win.scrollHeight;
+        }
+        function startTimer(sec) {
+            const btn = document.getElementById('explore-btn'); const bar = document.getElementById('timer-bar');
+            exploreEndTimestamp = Date.now() + (sec * 1000);
+            if(tInterval) clearInterval(tInterval);
+            tInterval = setInterval(() => { 
+                const remSec = (exploreEndTimestamp - Date.now()) / 1000;
+                if (remSec <= 0) { clearInterval(tInterval); btn.disabled = false; btn.innerText = "探索開始"; bar.style.width = "0%"; } 
+                else { btn.disabled = true; btn.innerText = `準備中...(${remSec.toFixed(1)}s)`; bar.style.width = (remSec/sec*100) + "%"; }
+            }, 100);
+        }
+        function updateBoostUI() {
+            const el = document.getElementById('boost-banner'); if (!currentUser.boostUntil) return;
+            const rem = currentUser.boostUntil - Date.now();
+            if (rem > 0) { el.innerHTML = `🔥 肉体加速中！ (残り ${Math.floor(rem/3600000)}時間${Math.floor((rem%3600000)/60000)}分) | <small>探索20秒 / 獲得EXP 1.5倍</small>`; el.style.display = 'block'; } else el.style.display = 'none';
+        }
+        async function updateProfile() {
+            const res = await fetch('/update-profile', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ oldName: currentUser.username, newName: document.getElementById('new-name-in').value, icon: currentUser.icon, style: currentUser.style }) });
+            const data = await res.json(); if (res.ok) { currentUser = data.user; save(); updateUI(); alert("保存しました"); }
+        }
+    </script>
+</body>
+</html>
