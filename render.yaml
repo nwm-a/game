@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: Pochi-The-STR
+    runtime: node
+    plan: free
+    region: singapore # 日本から近いシンガポールがおすすめ
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 18.16.0
+      - key: PORT
+        value: 3000
