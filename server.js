@@ -212,8 +212,24 @@ app.post('/arena/challenge', async (req, res) => {
     const targetFloor = arena[floorId];
     const now = Date.now();
 
+    // 1. クールタイムチェック
     if (now - (user.lastArenaAction || 0) < 60000) return res.status(400).json({ message: "クールタイム1分" });
-    if (targetFloor.required && (!user.arenaHistory || !user.arenaHistory[targetFloor.required])) return res.status(400).json({ message: "下の階の王者になれ！" });
+
+    // 2. 【追加】現在どこかの階の王者かどうかチェック
+    for (let fId in arena) {
+        if (arena[fId].owner.username === username) {
+            // もし自分が今「挑戦しようとしている階」の王者なら、当然戦えない
+            if (fId === floorId) return res.status(400).json({ message: "あなたは既にこの階の王者です！" });
+            
+            // もし「下の階」の王者なら、上の階へ行く前に王座を譲る（または負ける）必要があるというルールにする場合
+            return res.status(400).json({ message: "王者の座を捨てて上に行くことは許されない！(防衛を続けてください)" });
+        }
+    }
+
+    // 3. 上の階への挑戦資格チェック（既存の履歴チェック）
+    if (targetFloor.required && (!user.arenaHistory || !user.arenaHistory[targetFloor.required])) {
+        return res.status(400).json({ message: "下の階の王者経験が必要です！" });
+    }
 
     user.lastArenaAction = now;
     let p1 = { ...user, hp: user.hp + user.equipment.accessory.hp_bonus, str: user.str + user.equipment.weapon.str_bonus + (user.equipment.weapon.plus * 3), vit: user.vit + user.equipment.armor.vit_bonus + (user.equipment.armor.plus * 2), agi: user.agi + user.equipment.armor.agi_bonus + (user.equipment.armor.plus * 1), dex: user.dex + user.equipment.weapon.dex_bonus + (user.equipment.weapon.plus * 1), luk: user.luk + user.equipment.accessory.luk_bonus + (user.equipment.accessory.plus * 1) };
